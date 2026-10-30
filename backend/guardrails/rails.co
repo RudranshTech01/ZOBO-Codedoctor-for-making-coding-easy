@@ -1,0 +1,5 @@
+define subflow check code input length
+  $result = execute validate_code_input
+  if $result.is_blocked
+    bot refuse to respond
+    stop

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeDoctor AI</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: #0e1a2d;
+      --panel2: #101f35;
+      --border: #243b5a;
+      --text: #e7eef8;
+      --muted: #91a4bd;
+      --accent: #6d7cff;
+      --success: #22c55e;
+      --danger: #ff5c70;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: #091426;
+    }
+    .brand { font-size: 22px; font-weight: 800; }
+    .brand span { color: var(--accent); }
+    .status {
+      padding: 8px 12px;
+      border: 1px solid #2c6b52;
+      border-radius: 999px;
+      color: #6ee7b7;
+      font-size: 13px;
+    }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 22px;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-head strong { font-size: 15px; }
+    textarea, pre {
+      width: 100%;
+      font-family: Consolas, Monaco, monospace;
+    }
+    textarea {
+      min-height: 360px;
+      resize: vertical;
+      border: 0;
+      outline: 0;
+      background: #07101d;
+      color: #dce8f7;
+      padding: 18px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+    }
+    select, button {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--panel2);
+      color: var(--text);
+      padding: 10px 13px;
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .error {
+      margin: 14px 16px 0;
+      min-height: 90px;
+      background: #210f17;
+      border: 1px solid #6f2635;
+      color: #ffb4be;
+      padding: 12px;
+      border-radius: 10px;
+      font-family: Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    .result {
+      padding: 16px;
+      display: grid;
+      gap: 13px;
+    }
+    .card {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 13px;
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+    .card p { margin: 0; color: #c9d5e5; line-height: 1.5; }
+    pre {
+      margin: 0;
+      padding: 13px;
+      overflow: auto;
+      background: #07101d;
+      border-radius: 8px;
+      color: #dce8f7;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .tips { margin: 0; padding-left: 18px; color: #c9d5e5; }
+    .hint { color: var(--muted); font-size: 12px; padding: 0 16px 14px; }
+    .scan-banner {
+      display: none;
+      margin: 16px 22px 0;
+      padding: 14px;
+      border: 1px solid #49658b;
+      background: #13263d;
+      border-radius: 12px;
+    }
+    .scan-banner button { margin: 6px 6px 0 0; }
+    .scan-banner p { color: var(--muted); margin: 6px 0; }
+    .scan-preview {
+      width: 100%;
+      max-height: 360px;
+      display: none;
+      margin: 8px 0;
+      border: 1px solid var(--border);
+      cursor: crosshair;
+      touch-action: none;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">CodeDoctor <span>AI</span></div>
+  <div class="status">Groq AI + NVIDIA NeMo Guardrails</div>
+</header>
+
+<div id="scanBanner" class="scan-banner" role="region" aria-label="Screen scan permission">
+  <strong>CodeDoctor screen scan — permission required</strong>
+  <p>Choose a screen/window, then drag a box tightly around only the code. OCR will read only that box, locally. Review the extracted code before Analyze Code sends it to Groq.</p>
+  <button id="captureBtn" class="primary">Allow & choose screen</button>
+  <button id="readCropBtn" disabled>Read selected code area</button>
+  <button id="dismissBtn">Cancel</button>
+  <p id="scanStatus" aria-live="polite"></p>
+  <canvas id="scanPreview" class="scan-preview" aria-label="Captured screen. Drag to select the code area for local OCR."></canvas>
+</div>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <strong>Code Input</strong>
+      <select id="language">
+        <option>C++</option>
+        <option>C</option>
+        <option>Python</option>
+        <option>Java</option>
+        <option>JavaScript</option>
+        <option>HTML</option>
+      </select>
+    </div>
+
+    <textarea id="code">#include <iostream>
+using namespace std;
+
+int main() {
+    int n = 10;
+
+    if (n % 2 = 0) {
+        cout << "Even";
+    }
+
+    return 0;
+}</textarea>
+
+    <div class="controls">
+      <button id="analyzeBtn" class="primary">✨ Analyze Code</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+
+    <div class="panel-head">
+      <strong>Compiler / Runtime Error</strong>
+    </div>
+    <textarea id="error" style="min-height:130px">error: lvalue required as left operand of assignment</textarea>
+    <div class="hint">Desktop shortcut: Ctrl+Shift+Alt+J opens CodeDoctor in a side panel and starts screen capture.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <strong>CodeDoctor AI</strong>
+      <span id="type" class="hint" style="padding:0">Ready</span>
+    </div>
+    <div id="result" class="result">
+      <div class="card">
+        <h3>💡 Suggestion</h3>
+        <p>Enter code and an error, then click <b>Analyze Code</b>.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const desktop = window.codeDoctorDesktop;
+
+  if (desktop) {
+    desktop.onRequestScan(() => {
+      $("scanBanner").style.display = "block";
+      $("scanStatus").textContent = "Waiting for your permission.";
+    });
+
+    const preview = $("scanPreview");
+    const readCropBtn = $("readCropBtn");
+    let capturedImage = null;
+    let dragStart = null;
+    let cropRect = null;
+
+    function redrawPreview() {
+      if (!capturedImage) return;
+
+      const canvas = preview;
+      const ctx = canvas.getContext("2d");
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(capturedImage, 0, 0, canvas.width, canvas.height);
+
+      if (cropRect) {
+        ctx.fillStyle = "rgba(3, 9, 18, .58)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+        ctx.drawImage(
+          capturedImage,
+          cropRect.x,
+          cropRect.y,
+          cropRect.w,
+          cropRect.h,
+          cropRect.x,
+          cropRect.y,
+          cropRect.w,
+          cropRect.h
+        );
+        ctx.strokeStyle = "#6d7cff";
+        ctx.lineWidth = Math.max(3, canvas.width / 500);
+        ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+      }
+    }
+
+    function canvasPoint(event) {
+      const rect = preview.getBoundingClientRect();
+
+      return {
+        x: Math.max(
+          0,
+          Math.min(
+            preview.width,
+            (event.clientX - rect.left) * preview.width / rect.width
+          )
+        ),
+        y: Math.max(
+          0,
+          Math.min(
+            preview.height,
+            (event.clientY - rect.top) * preview.height / rect.height
+          )
+        )
+      };
+    }
+
+    preview.addEventListener("pointerdown", (event) => {
+      if (!capturedImage) return;
+
+      preview.setPointerCapture(event.pointerId);
+      dragStart = canvasPoint(event);
+      cropRect = { x: dragStart.x, y: dragStart.y, w: 0, h: 0 };
+      readCropBtn.disabled = true;
+      redrawPreview();
+    });
+
+    preview.addEventListener("pointermove", (event) => {
+      if (!dragStart) return;
+
+      const point = canvasPoint(event);
+      cropRect = {
+        x: Math.min(dragStart.x, point.x),
+        y: Math.min(dragStart.y, point.y),
+        w: Math.abs(point.x - dragStart.x),
+        h: Math.abs(point.y - dragStart.y)
+      };
+      redrawPreview();
+    });
+
+    preview.addEventListener("pointerup", () => {
+      dragStart = null;
+
+      if (cropRect && cropRect.w >= 20 && cropRect.h >= 12) {
+        readCropBtn.disabled = false;
+        $("scanStatus").textContent =
+          "Code area selected. Check the outline, then click Read selected code area.";
+      } else {
+        cropRect = null;
+        readCropBtn.disabled = true;
+        redrawPreview();
+      }
+    });
+
+    $("dismissBtn").onclick = () => {
+      $("scanBanner").style.display = "none";
+      preview.style.display = "none";
+      readCropBtn.disabled = true;
+      capturedImage = null;
+      cropRect = null;
+    };
+
+    $("captureBtn").onclick = async () => {
+      const btn = $("captureBtn");
+      btn.disabled = true;
+      $("scanStatus").textContent = "Requesting screen selection…";
+
+      try {
+        const shot = await desktop.captureWithPermission();
+
+        if (!shot) {
+          $("scanStatus").textContent = "Cancelled. Nothing was captured.";
+          return;
+        }
+
+        capturedImage = new Image();
+
+        await new Promise((resolve, reject) => {
+          capturedImage.onload = resolve;
+          capturedImage.onerror = () =>
+            reject(new Error("Could not load the captured image."));
+          capturedImage.src = shot;
+        });
+
+        preview.width = capturedImage.naturalWidth;
+        preview.height = capturedImage.naturalHeight;
+        cropRect = null;
+        preview.style.display = "block";
+        redrawPreview();
+        readCropBtn.disabled = true;
+        $("scanStatus").textContent =
+          "Drag a box tightly around the code only. Other screen areas will not be sent to OCR.";
+      } catch (e) {
+        $("scanStatus").textContent = "Scan failed: " + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    readCropBtn.onclick = async () => {
+      if (!capturedImage || !cropRect || !window.Tesseract) {
+        $("scanStatus").textContent =
+          "Capture a screen and select the code area first.";
+        return;
+      }
+
+      readCropBtn.disabled = true;
+      $("scanStatus").textContent =
+        "Reading only the selected code area locally…";
+
+      try {
+        const crop = document.createElement("canvas");
+        crop.width = Math.round(cropRect.w);
+        crop.height = Math.round(cropRect.h);
+
+        crop.getContext("2d").drawImage(
+          capturedImage,
+          Math.round(cropRect.x),
+          Math.round(cropRect.y),
+          crop.width,
+          crop.height,
+          0,
+          0,
+          crop.width,
+          crop.height
+        );
+
+        const result = await window.Tesseract.recognize(
+          crop.toDataURL("image/png"),
+          "eng",
+          {
+            tessedit_pageseg_mode: 6,
+            preserve_interword_spaces: "1"
+          }
+        );
+
+        const extracted = result.data.text.trim();
+
+        if (!extracted) {
+          throw new Error(
+            "No readable code detected in that area. Select a tighter/larger code region."
+          );
+        }
+
+        $("code").value = extracted;
+        $("scanStatus").textContent =
+          "OCR read only the selected area. Review the code, choose its language, then click Analyze Code. Nothing has been sent to Groq yet.";
+      } catch (e) {
+        $("scanStatus").textContent = "OCR failed: " + e.message;
+        readCropBtn.disabled = false;
+      }
+    };
+  }
+
+  function escapeHtml(value) {
+    return value.replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#039;"
+    }[ch]));
+  }
+
+  function renderResult(data) {
+    const tips = Array.isArray(data.tips) ? data.tips : [];
+
+    $("result").innerHTML = `
+      <div class="card">
+        <h3>🔴 Error Detected — ${escapeHtml(data.error_type || "Unknown")}</h3>
+        <p>${escapeHtml(data.error || "")}</p>
+      </div>
+      <div class="card">
+        <h3>🔎 Why this happens</h3>
+        <p>${escapeHtml(data.why || "")}</p>
+      </div>
+      <div class="card">
+        <h3>🛠️ Fixed Code</h3>
+        <pre>${escapeHtml(data.fixed_code || "")}</pre>
+      </div>
+      <div class="card">
+        <h3>✨ Better / Easier Approach</h3>
+        <p>${escapeHtml(data.better_approach || "")}</p>
+      </div>
+      <div class="card">
+        <h3>📌 Tips</h3>
+        <ul class="tips">${tips.map(t => `<li>${escapeHtml(String(t))}</li>`).join("")}</ul>
+      </div>
+    `;
+  }
+
+  $("analyzeBtn").addEventListener("click", async () => {
+    const button = $("analyzeBtn");
+    button.disabled = true;
+    button.textContent = "Analyzing...";
+    $("type").textContent = "Calling Groq AI...";
+
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          language: $("language").value,
+          code: $("code").value,
+          error: $("error").value
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Request failed");
+
+      renderResult(data);
+      $("type").textContent = "Analysis complete";
+    } catch (err) {
+      $("result").innerHTML = `
+        <div class="card">
+          <h3>⚠️ Request failed</h3>
+          <p>${escapeHtml(err.message)}</p>
+        </div>`;
+      $("type").textContent = "Error";
+    } finally {
+      button.disabled = false;
+      button.textContent = "✨ Analyze Code";
+    }
+  });
+
+  $("clearBtn").addEventListener("click", () => {
+    $("code").value = "";
+    $("error").value = "";
+
+    $("result").innerHTML = `
+      <div class="card">
+        <h3>💡 Suggestion</h3>
+        <p>Enter code and an error, then click <b>Analyze Code</b>.</p>
+      </div>`;
+
+    $("type").textContent = "Ready";
+  });
+</script>
+</body>
+</html>
